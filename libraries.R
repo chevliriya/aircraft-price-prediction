@@ -1,0 +1,8 @@
+library(ggplot2)
+library(GGally)
+library(lmtest)
+library(car)
+library(mctest)
+library(MASS)
+library(olsrr)
+library(leaps)
