@@ -104,7 +104,7 @@ price ~ factor(engine_type) + engine_power + max_speed + cruise_speed +
 ```text
 .
 ├── notebook/
-│   └── Aircraft_Price_Prediction.Rmd   # R Markdown notebook
+│   └── Aircraft_Price_Prediction.Rmd   
 ├── README.md
 └── .gitignore
 
