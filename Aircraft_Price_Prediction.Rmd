@@ -1,0 +1,1056 @@
+---
+title: 'DATA603Project: Aircraft Price Prediction'
+author:
+- Anitha Joseph
+- Jincy Thomas
+- Joshua Quartey
+- Megha Radhakrishnan Sanitha
+- Prichelle Lal
+- Riya Chevli
+output:
+  html_document: default
+  word_document: default
+  pdf_document:
+    latex_engine: xelatex
+editor_options:
+  markdown:
+    wrap: 72
+---
+
+```{r Libraries, include=FALSE}
+library(ggplot2)
+library(GGally)
+library(lmtest)
+library(car)
+library(mctest)
+library(MASS)
+library(olsrr)
+library(leaps)
+```
+
+# Aircraft Price Prediction using Multiple Linear Regression
+
+The aircraft price varies by their engine type, power, fuel capacity,
+speed, weight, distance range and other parameters. Prices for 518
+different aircraft are given in aircraft_price.csv file. The dataset
+includes 517 aircraft records with 14 quantitative variables and 2
+qualitative variables. Quantitative Variables are measured on a
+continuous ratio scale (e.g., speed in knots, weight in pounds, price in
+dollars) and Qualitative Variables are measured on a nominal scale
+(e.g., engine type as piston or other). The dataset contains a variety
+of aircraft performance and specification data, which could be useful
+for price prediction.
+
+The explained variable is:
+
+1.  price: in US dollars (Quantitative variable)
+
+The explanatory variables are:
+
+1.  model_name: Name of the aircraft model.
+
+2.  engine_type: Type of the engine. (Qualitative variable)
+
+3.  engine_power: Power of the engine. (hp)
+
+4.  max_speed: Maximum speed of the aircraft. (Knots(kt))
+
+5.  cruise_speed: Cruise speed of the aircraft. (Knots(kt))
+
+6.  stall_speed: Minimum speed of the aircraft to prevent
+    stalling.(Knots(kt))
+
+7.  fuel_tank: Fuel tank capacity of the aircraft. (gallons(gal))
+
+8.  all_eng_roc: All Engine Rate of Climb. The maximum altitude of the
+    aircraft at full power. (feet/min)
+
+9.  out_eng_roc: Out Engine Rate of Climb. The maximum altitude of the
+    aircraft at out power. (feet/min)
+
+10. takeoff_distance: The minimum distance required for an aircraft to
+    take off. (feet)
+
+11. landing_distance: The minimum distance required for an aircraft to
+    land. (feet)
+
+12. empty_weight: Empty weight of the aircraft. (pounds(lbs))
+
+13. length: Length of the aircraft. (inch)
+
+14. wing_span: Wingspan of the aircraft. (inch)
+
+15. range: Range of the aircraft. (nmi)
+
+```{r read csv file}
+# Read the aircraft data from the csv file
+Aircraft = read.csv("C:/603/aircraft_price.csv")
+print(head(Aircraft))
+```
+
+## 1. Cleaning the Aircraft data
+
+Check the Aircraft data for any missing values and then remove rows with
+missing data to create a cleaned version of the data set. It ensures
+that the cleaned Aircraft data has complete information in every row so
+you can analyze it without any gaps in data.
+
+```{r Data Cleaning}
+# Check for missing values
+sum(is.na(Aircraft))
+
+# Remove rows with any missing values
+AircraftData <- na.omit(Aircraft)
+print(head(AircraftData))
+```
+
+## 2. Create first order model
+
+First order model for predicting the Aircraft price is generated with
+the all the explanatory variables excluding the model name.
+
+```{r First Order Model}
+firstordermodel = lm(price ~factor(engine_type)+engine_power + 
+                       max_speed + cruise_speed +stall_speed + 
+                       fuel_tank + all_eng_roc + out_eng_roc + 
+                       takeoff_distance + landing_distance + 
+                       empty_weight + length + wing_span + range,
+             data = AircraftData)
+summary(firstordermodel)
+```
+
+## 3. Checking the Regression Assumptions
+
+### 3.1. Multicollinearity
+
+Multicollinearity occurs when independent variables are highly
+correlated, which can distort the coefficients in a regression model. We
+are testing for Multicollinearity with the following techniques:
+
+1.  Pairs plot
+
+2.  Variance Inflation Factors (VIF).(VIF \> 5 → Moderate
+    multicollinearity. VIF \> 10 → Severe multicollinearity.)
+
+#### 3.1.1 Multicollinearity: Pairs plot
+
+Let's plot the most correlated predictors:
+
+```{r Multicollinearity-Pairs plot}
+pairs(~ price + engine_power + max_speed + cruise_speed +stall_speed + 
+                       fuel_tank + all_eng_roc + out_eng_roc + takeoff_distance + landing_distance + 
+                       empty_weight + length + wing_span + range, data = AircraftData)
+```
+
+From the above output we can see that there exists correlation for
+engine_power with landing_distance, empty_weight and fuel_tank
+respectively. Also there exists a correlation between wing_span and
+length.
+
+#### 3.1.2 Multicollinearity: Variance Inflation Factors
+
+So let's find the VIF for the variables.
+
+```{r Multicollinearity-VIF}
+#2. Variance Inflation Factors (VIF)
+imcdiag(firstordermodel, method="VIF")
+vif(firstordermodel)
+```
+
+From the output we can see that landing_distance has highest VIF.
+According to the VIF values, we can list the highest multicollinearity
+items as below:
+
+Severe Multicollinearity (VIF/GVIF \> 10):
+
+1.  landing_distance (VIF=165.28, GVIF=165.28)
+
+2.  empty_weight (VIF=138.62, GVIF=138.62)
+
+3.  fuel_tank (VIF=30.52, GVIF=30.52)
+
+4.  engine_power (VIF=27.91, GVIF=27.91)
+
+5.  length (VIF=21.50, GVIF=21.50)
+
+6.  factor(engine_type)Piston (VIF=12.51, GVIF=16.14)
+
+7.  cruise_speed (VIF=10.05, GVIF=10.05)
+
+Moderate/Low Collinearity (VIF/GVIF \< 10): All other variables
+(e.g.,max_speed, wing_span, range) are safe to retain. GVIF (Generalized
+Variance Inflation Factor) adjusts for categorical predictors like
+engine_type. For categorical variables with Df \> 1, e.g., engine_type
+has 2 levels, GVIF\^(1/(2\*Df)) is interpreted. Here,
+factor(engine_type) has GVIF\^(1/4) = 2.00 → Acceptable (under common
+thresholds).
+
+So remove the most correlated variables Priority Order:
+
+First: landing_distance (VIF=165.28)
+
+Second: empty_weight (VIF=138.62)
+
+Third: fuel_tank (VIF=30.52)
+
+Fourth: length (VIF=21.50)
+
+Since enigne_power, Cruise_speed and engine_type are statistically and
+theoretically significant, we cannot remove them. Below code removes the
+variables in the highest collinearity order.
+
+```{r Removing Multicollinearity}
+#firstordermodel
+model1 = lm(price ~factor(engine_type)+engine_power + max_speed + cruise_speed +stall_speed + 
+                       fuel_tank + all_eng_roc + out_eng_roc + takeoff_distance + landing_distance + 
+                       empty_weight + length + wing_span + range, data = AircraftData)
+summary(model1)
+imcdiag(model1, method="VIF")
+
+#removed landing_distance
+model2 = lm(price ~factor(engine_type)+engine_power + max_speed + cruise_speed +stall_speed + 
+                       fuel_tank + all_eng_roc + out_eng_roc + takeoff_distance +  
+                       empty_weight + length + wing_span + range, data = AircraftData)
+summary(model2)
+imcdiag(model2, method="VIF")
+
+#removed empty_weight
+model3 = lm(price ~factor(engine_type)+engine_power + max_speed + cruise_speed +stall_speed + 
+                       fuel_tank + all_eng_roc + out_eng_roc + takeoff_distance + length + wing_span + range,
+             data = AircraftData)
+summary(model3)
+imcdiag(model3, method="VIF")
+
+#removed fuel_tank
+model4 = lm(price ~factor(engine_type)+engine_power + max_speed + cruise_speed +stall_speed + 
+                       all_eng_roc + out_eng_roc + takeoff_distance + length + wing_span + range,
+             data = AircraftData)
+summary(model4)
+imcdiag(model4, method="VIF")
+
+#removed length
+model5 = lm(price ~factor(engine_type)+engine_power + max_speed + cruise_speed +stall_speed + 
+                       all_eng_roc + out_eng_roc + takeoff_distance + wing_span + range, data = AircraftData)
+summary(model5)
+imcdiag(model5, method="VIF")
+
+# removed insignifocant terms:all_eng_roc, out_eng_roc & takeoff_distance from model5
+model6 = lm(price ~factor(engine_type)+engine_power + max_speed + cruise_speed +stall_speed + 
+              wing_span + range, data = AircraftData)
+summary(model6)
+imcdiag(model6, method="VIF")
+
+# removed cruise_speed: even if the multicollinearity =0 , VIF>5, so removed from model5
+model7 = lm(price ~factor(engine_type)+engine_power + max_speed + stall_speed + all_eng_roc + out_eng_roc + 
+                       takeoff_distance + wing_span + range, data = AircraftData)
+summary(model7)
+#imcdiag(model7, method="VIF")
+
+# removed insignifocant terms:out_eng_roc from model6
+model8 = lm(price ~factor(engine_type)+engine_power + max_speed + stall_speed + 
+                       all_eng_roc +  takeoff_distance + wing_span + range, data = AircraftData)
+summary(model8)
+imcdiag(model7, method="VIF")
+```
+
+Proceeding with model 5, since the multicollinearity removed.
+
+```{r Model with no Multicollinearity}
+model5 = lm(price ~factor(engine_type)+engine_power + max_speed + cruise_speed +stall_speed + 
+                       all_eng_roc + out_eng_roc + takeoff_distance + wing_span + range, data = AircraftData)
+summary(model5)
+imcdiag(model5, method="VIF")
+
+plot(~price +factor(engine_type)+engine_power + max_speed + cruise_speed +stall_speed + 
+                       all_eng_roc + out_eng_roc + takeoff_distance + wing_span + range, data = AircraftData)
+```
+
+## 4. MODEL SELECTION PROCEDURES
+
+### 4.1. Stepwise Selection Procedure
+
+```{r Stepwise Selection Procedure}
+fullmodel = lm(price ~ engine_type + engine_power + max_speed + cruise_speed +stall_speed + 
+                       all_eng_roc + out_eng_roc + takeoff_distance + wing_span + range, data = AircraftData)
+
+stepmod=ols_step_both_p(fullmodel,p_enter = 0.05, p_remove = 0.1, details=TRUE)
+summary(stepmod$model)
+stepmod$metrics$adj_r2
+```
+
+Best additive model using the Stepwise selection procedure is as
+follows:
+
+$\widehat{\text{price}}$ = 693659.32 - 661350.47X~engine_typePiston~ -
+527735.55X~engine_typePropjet~ - 115.72X~engine_power~ +
+1571.61X~max_speed~ + 4963.33X~cruise_speed~ + 5401.47X~stall_speed~ +
+1104.12X~wing_span~ + 159.60X~range~
+
+### 4.2. Forward Selection Procedure
+
+```{r Forward Selection Procedure}
+ExecPriceFor=ols_step_forward_p(fullmodel,p_val = 0.05, details=TRUE)
+summary(ExecPriceFor$model)
+ExecPriceFor$metrics$adj_r2
+```
+
+Best additive model using the Forward selection procedure is as follows:
+
+$\widehat{\text{price}}$ = 693659.32 - 661350.47X~engine_typePiston~ -
+527735.55X~engine_typePropjet~ - 115.72X~engine_power~ +
+1571.61X~max_speed~ + 4963.33X~cruise_speed~ + 5401.47X~stall_speed~ +
+1104.12X~wing_span~ + 159.60X~range~
+
+### 4.3. Backwards Elimination
+
+```{r Backwards Elimination 1}
+ExecPriceBack=ols_step_backward_p(fullmodel, p_val = 0.05, details=TRUE)
+summary(ExecPriceBack$model)
+```
+
+Best additive model using the Backwards elimination procedure is as
+follows:
+
+$\widehat{\text{price}}$ = 693659.32 - 661350.47X~engine_typePiston~ -
+527735.55X~engine_typePropjet~ - 115.72X~engine_power~ +
+1571.61X~max_speed~ + 4963.33X~cruise_speed~ + 5401.47X~stall_speed~ +
+1104.12X~wing_span~ + 159.60X~range~
+
+```{r Backwards Elimination 2}
+ExecPriceBack$metrics
+ExecPriceBack$metrics$adj_r2
+```
+
+### 4.4. All-Possible-Regressions Selection Procedure
+
+```{r All-Possible-Regressions Selection1: Option1}
+#option 1
+ExecSubsets=ols_step_best_subset(fullmodel, details=TRUE)
+ExecSubsets$metrics
+```
+
+Using option1(olsrr package): The 7th model is the best model, with CP =
+10.15265 and AIC = 14431.78(smallest AIC) and predictors are:
+engine_type, engine_power, max_speed, cruise_speed, stall_speed,
+wing_span & range.
+
+```{r All-Possible-Regressions Selection1: Option 1}
+#option 1 Continued
+rsquare=c((ExecSubsets$metrics)$rsquare)
+AdjustedR=c((ExecSubsets$metrics)$adjr)
+cp=c((ExecSubsets$metrics)$cp)
+AIC=c((ExecSubsets$metrics)$aic)
+cbind(rsquare,AdjustedR,cp,AIC)
+```
+
+```{r All-Possible-Regressions Selection2: Option2}
+#option 2: using leaps package
+best.subsetFullModel=regsubsets(price ~ engine_type + engine_power + max_speed + cruise_speed +stall_speed + 
+                       all_eng_roc + out_eng_roc + takeoff_distance + wing_span + range, data= AircraftData, nv=10 )
+summary(best.subsetFullModel)
+```
+
+```{r All-Possible-Regressions Selection2: Option 2}
+reg.summary=summary(best.subsetFullModel)
+rsquare=c(reg.summary$rsq)
+cp=c(reg.summary$cp)
+AdjustedR=c(reg.summary$adjr2)
+RSS=c(reg.summary$rss)
+BIC=c(reg.summary$bic)
+cbind(rsquare,cp,BIC,RSS,AdjustedR)
+```
+
+Using the option2(with leaps package): The model with AdjustedR2 =
+0.8728655, Mallow'sCP = 10.15265, BIC = -997.7155 is the best predictor
+and predictors are: engine_type, engine_power, max_speed, cruise_speed,
+stall_speed, wing_span & range.
+
+Thus we can conclude that our best additive model as: price \~
+engine_type + engine_power + max_speed + cruise_speed + stall_speed +
+wing_span + range
+
+## 5. Interaction model building
+
+In the next step, we will build interaction models based on best
+additive model.
+
+```{r Interaction model}
+interactPriceFull = lm(price ~ (factor(engine_type) + engine_power + max_speed + 
+                                  cruise_speed + stall_speed + wing_span + range)^2,  data = AircraftData)
+
+summary(interactPriceFull)
+
+#insignificant terms are removed and new model is created
+interacModel = lm(price ~ factor(engine_type) + engine_power + max_speed + 
+                        cruise_speed + stall_speed + wing_span +  range +
+                        factor(engine_type) * engine_power + factor(engine_type) * max_speed + 
+                        factor(engine_type) * cruise_speed + factor(engine_type) * wing_span +  
+                        engine_power * max_speed + engine_power * cruise_speed + engine_power * wing_span  + 
+                        max_speed * wing_span + cruise_speed * stall_speed,   data = AircraftData)
+
+summary(interacModel)
+
+#insignicant terms removed from the above interaction model: range
+bestInteracModel = lm(price ~ factor(engine_type) + engine_power + max_speed + 
+                        cruise_speed + stall_speed + wing_span +
+                        factor(engine_type) * engine_power + factor(engine_type) * max_speed + 
+                        factor(engine_type) * cruise_speed + factor(engine_type) * wing_span +  
+                        engine_power * max_speed + engine_power * cruise_speed + engine_power * wing_span  + 
+                        max_speed * wing_span + cruise_speed * stall_speed,   data = AircraftData)
+
+summary(bestInteracModel)
+```
+
+bestInteracModel =\> price \~ factor(engine_type) + engine_power +
+max_speed + cruise_speed + stall_speed + wing_span + factor(engine_type)
+\* engine_power + factor(engine_type) \* max_speed + factor(engine_type)
+\* cruise_speed + factor(engine_type) \* wing_span +\
+engine_power \* max_speed + engine_power \* cruise_speed + engine_power
+\* wing_span + max_speed \* wing_span + cruise_speed \* stall_speed
+
+We have to test which model is to be taken as the best interaction
+model. So we can perform an ANOVA test. H~0~: the reduced model is the
+best H~1~: the full interaction model is the best
+
+```{r Interaction model ANOVA test}
+anova(bestInteracModel, interactPriceFull)
+```
+
+From the above output, we can see that the p-value = 0.06086 \>
+aplha(0.05). So we fail to reject the null hypothesis. There for we can
+say that the reduced model is the best.
+
+## 6. Introduce higher order terms in best interaction model
+
+We can check if there is a possibility for higher order for the
+predictors using the pairs plot.
+
+```{r Higher order model: Pairs plot}
+pairs(~price + factor(engine_type) +engine_power, data = AircraftData , panel  = panel.smooth)
+
+pairs(~price + max_speed + cruise_speed + stall_speed, data = AircraftData, panel  = panel.smooth)
+
+pairs(~price + wing_span + range ,data = AircraftData, panel  = panel.smooth)
+
+pairs(~price + engine_power + max_speed + cruise_speed + stall_speed + wing_span + range ,data = AircraftData, panel  = panel.smooth)
+```
+
+From the above output, we can see there might be a possibility for
+higher orders for the variables: engine_power, max_speed and
+cruise_speed.
+
+### 6.1. Checking higher order term for engine_power
+
+```{r Higher order model: engin_power}
+# Checking I(engine_power^2)
+higherOrder1 = lm(price ~ factor(engine_type) + engine_power + I(engine_power^2) +
+                        max_speed + cruise_speed + stall_speed + wing_span +
+                        factor(engine_type) * engine_power + factor(engine_type) * max_speed + 
+                        factor(engine_type) * cruise_speed + factor(engine_type) * wing_span +  
+                        engine_power * max_speed + engine_power * cruise_speed + engine_power * wing_span  + 
+                        max_speed * wing_span + cruise_speed * stall_speed,   data = AircraftData)
+summary(higherOrder1)
+```
+
+Since I(engine_power\^2) is not significant with the p-value, we are
+moving to next step.
+
+### 6.2. Checking higher order term for max_speed
+
+```{r Higher order model: max_speed}
+# Checking I(max_speed^2)
+higherOrderMaxSpeed2 = lm(price ~ factor(engine_type) + engine_power + I(max_speed^2) +
+                        max_speed + cruise_speed + stall_speed + wing_span +
+                        factor(engine_type) * engine_power + factor(engine_type) * max_speed + 
+                        factor(engine_type) * cruise_speed + factor(engine_type) * wing_span +  
+                        engine_power * max_speed + engine_power * cruise_speed + engine_power * wing_span  + 
+                        max_speed * wing_span + cruise_speed * stall_speed,   data = AircraftData)
+
+
+# Checking I(max_speed^3)
+higherOrderMaxSpeed3 = lm(price ~ factor(engine_type) + engine_power + I(max_speed^2) + I(max_speed^3) +
+                        max_speed + cruise_speed + stall_speed + wing_span +
+                        factor(engine_type) * engine_power + factor(engine_type) * max_speed + 
+                        factor(engine_type) * cruise_speed + factor(engine_type) * wing_span +  
+                        engine_power * max_speed + engine_power * cruise_speed + engine_power * wing_span  + 
+                        max_speed * wing_span + cruise_speed * stall_speed,   data = AircraftData)
+
+
+# Checking I(max_speed^4)
+higherOrderMaxSpeed4 = lm(price ~ factor(engine_type) + engine_power + I(max_speed^2) + I(max_speed^3) + I(max_speed^4) +
+                        max_speed + cruise_speed + stall_speed + wing_span +
+                        factor(engine_type) * engine_power + factor(engine_type) * max_speed + 
+                        factor(engine_type) * cruise_speed + factor(engine_type) * wing_span +  
+                        engine_power * max_speed + engine_power * cruise_speed + engine_power * wing_span  + 
+                        max_speed * wing_span + cruise_speed * stall_speed,   data = AircraftData)
+
+summary(higherOrderMaxSpeed2)
+summary(higherOrderMaxSpeed3)
+summary(higherOrderMaxSpeed4)
+```
+
+The quartic term is not significant, So we proceed with the model with
+cubic term.
+
+### 6.3. Checking higher order term for cruise_speed
+
+```{r Higher order model: cruise_speed}
+# Checking I(cruise_speed^2)
+higherOrderCruiseSpeed2 = lm(price ~ factor(engine_type) + engine_power + I(cruise_speed^2) +
+                        max_speed + cruise_speed + stall_speed + wing_span +
+                        factor(engine_type) * engine_power + factor(engine_type) * max_speed + 
+                        factor(engine_type) * cruise_speed + factor(engine_type) * wing_span +  
+                        engine_power * max_speed + engine_power * cruise_speed + engine_power * wing_span  + 
+                        max_speed * wing_span + cruise_speed * stall_speed,   data = AircraftData)
+
+
+# Checking I(cruise_speed^3)
+higherOrderCruiseSpeed3 = lm(price ~ factor(engine_type) + engine_power + I(cruise_speed^2) + I(cruise_speed^3) +
+                        max_speed + cruise_speed + stall_speed + wing_span +
+                        factor(engine_type) * engine_power + factor(engine_type) * max_speed + 
+                        factor(engine_type) * cruise_speed + factor(engine_type) * wing_span +  
+                        engine_power * max_speed + engine_power * cruise_speed + engine_power * wing_span  + 
+                        max_speed * wing_span + cruise_speed * stall_speed,   data = AircraftData)
+
+summary(higherOrderCruiseSpeed2)
+summary(higherOrderCruiseSpeed3)
+```
+
+The cubic term for cruise_speed is not significant, So we proceed with
+the model with quadratic term.
+
+### 6.4. Comparison of models with higher order terms to get the final best model
+
+```{r Higher order model comparison}
+summary(higherOrderMaxSpeed3)$adj.r.squared
+sigma(higherOrderMaxSpeed3)
+
+summary(higherOrderCruiseSpeed2)$adj.r.squared
+sigma(higherOrderCruiseSpeed2)
+```
+
+Based on the ouput above: Adjusted r square is higher for
+higherOrderCruiseSpeed2 model and RSE is lower,So we could say that the
+higherOrderMaxSpeed3 is the best model.
+
+So from all the above models we can conclude our best model as:
+
+price \~ factor(engine_type) + engine_power + I(cruise_speed\^2) +
+max_speed + cruise_speed + stall_speed + wing_span + factor(engine_type)
+\* engine_power + factor(engine_type) \* max_speed + factor(engine_type)
+\* cruise_speed + factor(engine_type) \* wing_span + engine_power \*
+max_speed + engine_power \* cruise_speed + engine_power \* wing_span +
+max_speed \* wing_span + cruise_speed \* stall_speed
+
+$\widehat{\text{price}}$ = 5823241.56 - 4388887.92X~engine_typePiston~ -
+2755059.51X~engine_typePropjet~ + 21X~cruise_speed^2^~ +
+1699.67X~engine_power~ - 3169.59X~max_speed~ - 7505.68X~cruise_speed~ -
+17359.94X~stall_speed~ - 6490.75X~wing_span~ - 981X~(engine_type)Piston~
+\* X~engine_power~ - 2284.54X~(engine_type)Propjet~ \* X~engine_power~ +
+1570.64X~(engine_type)Piston~ \* X~max_speed~ +
+5697.49X~(engine_type)Propjet~ \* X~max_speed~ +
+8317.65X~(engine_type)Piston~ \* X~cruise_speed~ -
+152.84X~(engine_type)Propjet~ \* X~cruise_speed~ +
+5975.35X~(engine_type)Piston~ \* X~wing_span~ +
+5967.59X~(engine_type)Propjet~ \* X~wing_span~ - 1.27X~engine_power~ \*
+X~max_speed~ - 3.21X~engine_power~ \* X~cruise_speed~ +
+0.43X~engine_power~ \* X~wing_span~ + 10.64X~max_speed~ \*
+X~wing_span~ + 49.2X~cruise_speed~ \* X~stall_speed~
+
+### 6.5. Interpretation of coefficients for best model
+
+```{r}
+bestModel = lm(price ~ factor(engine_type) + engine_power + I(cruise_speed^2) +
+                        max_speed + cruise_speed + stall_speed + wing_span +
+                        factor(engine_type) * engine_power + factor(engine_type) * max_speed + 
+                        factor(engine_type) * cruise_speed + factor(engine_type) * wing_span +  
+                        engine_power * max_speed + engine_power * cruise_speed + engine_power * wing_span  + 
+                        max_speed * wing_span + cruise_speed * stall_speed,   data = AircraftData)
+```
+
+$\beta_0$= 5823241.56\
+The price of an aircraft with jet engine type is \$5.8 million when all
+the other predictors are zero.(This is not valid in real life
+situations)
+
+#### Main Effects of Qualitative variable:
+
+$\beta_~(enginetype)Piston$= - 4388887.92 Aircraft with a Piston engine
+are, on average, \$4.4 million cheaper than the aircrafts with Jet
+engine type holding all other variables constant.
+
+$\beta_~(enginetype)Propjet$= -2755059.51 The price of an aircraft with
+a Propjet engine is \$2.8 million lesser than the jet engine type
+aircrafts. Still cheaper, but not as much as a piston plane.
+
+#### Main effects of Quantitative variable:
+
+$\beta~cruise_speed^2$= 21 The squared term suggests a nonlinear
+relationship between cruise speed and price. For a 1 unit increase in
+cruise_speed, the price increases by 21\*$cruisespeed^2$, indicating
+that price rises more steeply at higher cruise speeds.
+
+$\beta~enginepower$= 1699.67\
+A 1-horsepower increase in engine_power price jump by \$1,699.67,
+reflecting the value of greater power.we know —stronger engines aren’t
+cheap.
+
+$\beta~maxspeed$= -3169.59\
+For every 1 knot increase of max speed, the price drops by \$3,170.
+usually Faster planes should cost more but here this effect is tangled
+up with other factors we will get to—like interactions.
+
+$\beta~cruisespeed$= -7505.68\
+A 1-knot increase in cruise speed decreases price by
+\$7,505.68.##########################checkkkkk
+
+$\beta~stallspeed$= -17359.94\
+If the stall speed goes up by a one knot, the price drops by \$17,360.
+
+$\beta~wingspan$= -6490.75\
+A 1-inch increase in wingspan decreases price by \$6,491.
+
+### Main effect on Interaction Terms with Engine Type:
+
+$\beta_~(enginetype)Piston*enginepower$= −981\
+For Piston engines, each additional horsepower reduces the price
+increase from engine_power by \$981 compared to the reference type. Net
+effect for Piston: *1,699.67 − 981 = 718.67* dollars per horsepower.
+
+$\beta_~(enginetype)Propjet*enginepower$= −2,284.54 For Propjet engines,
+each horsepower reduces the price increase by \$2,284.54.
+
+$\beta_~(enginetype)Piston*maxspeed$= 1,570.64\
+For Piston engines, a 1-knot increase in max speed increases price by an
+additional \$1,570.64 over the reference. Net effect: −3,169.59 +
+1,570.64= −1,598.95 dollars per unit.With piston engines, an knot
+increase of max speed cuts the price drop to \$1,599.
+
+$\beta_~(enginetype)Propjet*maxspeed$= 5,697.49\
+For Propjets, a 1-knot increase in max speed adds \$5,697.49 to the
+price of the aircraft. Net effect:\
+−3,169.59+5,697.49 = 2,527.90, indicating higher max speed boosts price
+for Propjets.
+
+$\beta_~(enginetype)Piston*cruisespeed$= 8,317.65\
+For Piston engines, a 1-knot increase in cruise speed adds \$8,317.65.
+Net effect: −7,505.68 + 8,317.65= 811.97 dollars per unit.Here, a knot
+increase of cruise speed adds \$812 to the price for aircrafts with
+piston engine.
+
+$\beta_~(enginetype)Propjet*cruisespeed$= − 152.84\
+For Propjets, a 1-knot increase reduces the cruise speed effect by
+\$152.84. Net effect:\
+−7,505.68 − 152.84= −7,658.52.For propjets, cruise speed still drags the
+price down, by \$7,659 per knot.
+
+$\beta_~(enginetype)Piston*wingspan$= 5,975.35\
+For Piston engines, a 1-inch increase in wingspan adds \$5,975.35 to the
+aircraft price.\
+Net effect: −6,490.75+5,975.35= −515.40.piston planes soften the
+wingspan price drop to about \$515 per inch.
+
+$\beta_~(enginetype)Propjet*wingspan$= 5,967.59\
+For Propjets, a 1-inch increase in wingspan increases the aircraft price
+by \$5,967.59.\
+Net effect: −6,490.75 + 5,967.59=−523.16.Propjet planes soften the
+wingspan price drop to about \$515 per inch.
+
+### Main effect of Quantitative Interaction Terms:
+
+$\beta_~enginepower*maxspeed$= -1.27\
+For a 1-knot increase in max speed, the effect of engine power on price
+decreases by \$1.27 per horsepower.
+
+$\beta_~enginepower*cruisespeed$= -3.21\
+For a 1-knot increase in cruise speed, the effect of engine power on
+aircraft price decreases by \$3.21 per horsepower.
+
+$\beta_~enginepower*wingspan$= 0.43\
+For a 1-inch increase in wingspan, the effect of engine power on
+aircraft price increases by \$0.43 per horsepower.
+
+$\beta_~maxspeed*wingspan$= 10.64\
+For a 1-inch increase in wingspan, the effect of max speed on aircraft
+price increases by \$10.64 per knot.
+
+$\beta_~cruisespeed*stallspeed$= 49.2\
+For a 1-knot increase in stall speed, the effect of cruise speed on
+price of the aircraft increases by \$49.2 per knot.
+
+### 6.6. Confidence Interval Estimation for best mdoel
+
+```{r}
+conf_intervals <- confint(bestModel, level = 0.95)
+print(conf_intervals)
+```
+
+Our model identifies key drivers of aircraft price, with engine type, engine power, cruise speed, stall speed, and wing span playing significant roles. Engine power increases price, while stall speed and wing span tend to decrease it. Notably, Propjet aircraft benefit more from higher speeds and larger wingspans. The most significant predictors are cruise speed, engine power, and cruise speed squared. We are 95% confident that for every one-unit increase in cruise speed, price decreases by 1,660 to 13,300, while engine power increases price by 1,280 to 2,120 per unit. Additionally, the quadratic cruise speed term shows a nonlinear price effect, meaning price increases at higher cruise speeds but at a diminishing rate.
+
+### 6.7. Prediction with Best model
+
+```{r}
+bestModel = lm(price ~ factor(engine_type) + engine_power + I(cruise_speed^2) +
+                        max_speed + cruise_speed + stall_speed + wing_span +
+                        factor(engine_type) * engine_power + factor(engine_type) * max_speed + 
+                        factor(engine_type) * cruise_speed + factor(engine_type) * wing_span +  
+                        engine_power * max_speed + engine_power * cruise_speed + engine_power * wing_span  + 
+                        max_speed * wing_span + cruise_speed * stall_speed,   data = AircraftData)
+
+newdata = data.frame(engine_type = "Piston",engine_power=300, max_speed =240, cruise_speed =200, stall_speed=70, wing_span=400)
+predict(bestModel,newdata,interval="predict",level = .95)
+```
+
+The model predicts a fitted price of 2,324,571 USD for a piston-engine aircraft with the given specifications: engine_power = 300, max_speed = 240, cruise_speed = 200, stall_speed = 70, and wing_span = 400. The 95% prediction interval ranges from 1,765,506 USD to 2,883,635 USD.
+
+## 7. Checking the remaining Regression Assumptions
+
+### 7.1. Linearity Assumption
+
+The linear regression model assumes that there is a straight-line
+(linear) relationship between the predictors and the aircraft price. For
+identifying the non linearity we are using the residual plot.
+
+```{r Linearity Assumption}
+#Residual Plot
+bestModel = lm(price ~ factor(engine_type) + engine_power + I(cruise_speed^2) +
+                        max_speed + cruise_speed + stall_speed + wing_span +
+                        factor(engine_type) * engine_power + factor(engine_type) * max_speed + 
+                        factor(engine_type) * cruise_speed + factor(engine_type) * wing_span +  
+                        engine_power * max_speed + engine_power * cruise_speed + engine_power * wing_span  + 
+                        max_speed * wing_span + cruise_speed * stall_speed,   data = AircraftData)
+
+summary(bestModel)$adj.r.squared
+sigma(bestModel)
+
+ggplot(bestModel, aes(x=.fitted, y=.resid)) +
+  geom_point() + geom_smooth(color = "lightblue") +
+  geom_hline(yintercept = 0) +  
+  labs(title = "Residual vs fitted values",
+       x = "Fitted",
+       y = "Residual",
+       color = "Method") + 
+  theme_minimal()
+```
+
+There appears to be no pattern of the residuals at all. The 𝑅2𝑎𝑑𝑗 of the
+bestModel is 0.9247535 indicates the variation in Price that can be
+explained by this model is 92.48% with RMSE = 279449.2. We can conclude
+that the above model named bestModel, is the best fit model to predict
+Price among the models we considered.
+
+We will now extract the residuals and plot this data to analyze the
+histogram, qq plot, and residual vs fitted plot.
+
+#### 7.2. Normality Assumption
+
+#### 7.2.1 Histogram of Residuals
+
+```{r}
+residuals = resid(bestModel)
+hist(residuals, main="Histogram of Residuals - Best Model", xlab="Residuals", col="lightblue", border="black", breaks = 30)
+```
+
+The histogram appears to be somewhat centered around zero, which is
+good. However, the shape does not perfectly follow a bell curve (normal
+distribution). The bars are somewhat skewed—there seems to be a longer
+right tail, suggesting potential positive skewness. Next, we will
+confirm whether the residuals deviate from normality, using the Q-Q
+Plot.
+
+#### 7.2.2 Q-Q Plot of Residuals
+
+```{r}
+# Q-Q plot of residuals
+qqnorm(residuals, main="Q-Q Plot of Residuals")
+qqline(residuals, col="lightblue")
+```
+
+The points deviate significantly at both ends (left and right tails),
+indicating non-normality in the residuals. The right tail (higher
+values) has several points far above the line, suggesting the presence
+of high-value outliers (potentially high-priced aircraft affecting the
+model). The left tail (lower values) slightly deviates as well. Most
+points near the center follow the red line well, which means most
+residuals are approximately normal. Since the p-value is very small,
+your residuals do not follow a normal distribution. This violates the
+normality assumption in linear regression, which can impact hypothesis
+testing and confidence intervals.
+
+#### 7.2.3 Residuals vs Fitted Plot
+
+```{r}
+# Plot Residuals vs Fitted Values
+plot(fitted(bestModel), residuals, main="Residuals vs Fitted", xlab="Fitted Values", ylab="Residuals")
+abline(h=0, col="red")
+```
+
+The Residuals vs. Fitted plot shows signs of heteroscedasticity, as
+residuals exhibit increasing variance for larger fitted values,
+indicating that the model struggles to predict high aircraft prices
+accurately. Additionally, a slight curvature suggests potential
+non-linearity, meaning the model might be missing key interaction or
+polynomial effects. There are also outliers that could be influential
+observations, impacting the model’s stability. These issues violate
+regression assumptions, potentially leading to unreliable standard
+errors and biased predictions.
+
+Overall, this Residuals vs. Fitted plot confirms that your model suffers
+from heteroscedasticity and possible outliers. Applying log
+transformation, WLS regression, or robust regression techniques should
+improve the model’s reliability
+
+### 7.3. Independence Assumption
+
+In linear regression, the error terms (𝜖₁, 𝜖₂, 𝜖₃, etc.) should not be
+related to each other. This means the value of one error doesn’t give
+any clue about the next one. When this assumption is violated (e.g.,
+errors are correlated), it often happens in time-series data, where
+observations are taken over time. As we do not have any time series data
+or spatial variable, we considered to plot the residuals vs engine_type
+category.
+
+```{r Independence Assumption}
+residuals <- residuals(bestModel)  
+residuals_data <- data.frame(Residuals = residuals, EngineType = AircraftData$engine_type)
+boxplot(Residuals ~ EngineType, data = residuals_data, 
+        main = "Residuals vs Engine Type",
+        xlab = "Engine Type",
+        ylab = "Residuals",
+        col = "lightblue")
+```
+
+The box plot above indicates that the residuals for different engine
+types are centered around zero and do not display any noticeable
+patterns. Therefore, the independence assumption is satisfied.
+
+### 7.4. Equal Variance Assumption
+
+```{r Equal Variance Assumption}
+bestModel = lm(price ~ factor(engine_type) + engine_power + I(cruise_speed^2) +
+                        max_speed + cruise_speed + stall_speed + wing_span +
+                        factor(engine_type) * engine_power + factor(engine_type) * max_speed + 
+                        factor(engine_type) * cruise_speed + factor(engine_type) * wing_span +  
+                        engine_power * max_speed + engine_power * cruise_speed + engine_power * wing_span  + 
+                        max_speed * wing_span + cruise_speed * stall_speed,   data = AircraftData)
+
+#residuals plot
+plot(bestModel, which=1) 
+
+#scale-location plot
+plot(bestModel, which=3) 
+```
+
+```{r Equal Variance Assumption: BP test}
+#The Breusch-Pagan Test
+bptest(bestModel)
+```
+
+H~0~: heteroscedasticity is not present (homoscedasticity)
+
+H~1~: heteroscedasticity is present
+
+Here we reject the null hypothesis (p-value \< 0.05), so we conclude we
+do have heteroscedasticity. Maybe we can try a higher order model to get
+rid of this issue.
+
+To resolve we can apply log transformation
+
+### 7.4.1. Log transformation
+
+```{r Equal Variance Assumption- Log transformation}
+AircraftData$log_price = log(AircraftData$price)
+bestModel_log <- lm(log_price ~ factor(engine_type) + engine_power + I(cruise_speed^2) +
+                        max_speed + cruise_speed + stall_speed + wing_span +
+                        factor(engine_type) * engine_power + factor(engine_type) * max_speed + 
+                        factor(engine_type) * cruise_speed + factor(engine_type) * wing_span +  
+                        engine_power * max_speed + engine_power * cruise_speed + engine_power * wing_span  + 
+                        max_speed * wing_span + cruise_speed * stall_speed,   data = AircraftData)
+
+bptest(bestModel_log)
+plot(bestModel_log, which=3)
+```
+
+```{r Equal Variance Assumption- sqrt transformation}
+#sqrt transformation
+AircraftData$sqrt_price = sqrt(AircraftData$price)
+bestModel_sqrt <- lm(sqrt_price ~ factor(engine_type) + engine_power + I(cruise_speed^2) +
+                        max_speed + cruise_speed + stall_speed + wing_span +
+                        factor(engine_type) * engine_power + factor(engine_type) * max_speed + 
+                        factor(engine_type) * cruise_speed + factor(engine_type) * wing_span +  
+                        engine_power * max_speed + engine_power * cruise_speed + engine_power * wing_span  + 
+                        max_speed * wing_span + cruise_speed * stall_speed,   data = AircraftData)
+
+bptest(bestModel_sqrt)
+plot(bestModel_sqrt, which=3)
+```
+
+p-value \< 2.2e-16 is less than 0.05, so we reject H~0~. Therefor there
+exists hetroscedasticity. Now we apply Box-Cox transformations.
+
+### 7.4.2. Box-Cox transformations
+
+```{r Equal Variance Assumption- Box-Cox transformations}
+bc=boxcox(bestModel,lambda=seq(-5,5))
+bestlambda=bc$x[which(bc$y==max(bc$y))]
+(bestlambda)
+#The Breusch-Pagan Test
+bptest(bestModel)
+
+bcmodel=lm((((price^0.8585859)-1)/0.8585859) ~ factor(engine_type) + engine_power + I(cruise_speed^2) +
+                        max_speed + cruise_speed + stall_speed + wing_span +
+                        factor(engine_type) * engine_power + factor(engine_type) * max_speed + 
+                        factor(engine_type) * cruise_speed + factor(engine_type) * wing_span +  
+                        engine_power * max_speed + engine_power * cruise_speed + engine_power * wing_span  + 
+                        max_speed * wing_span + cruise_speed * stall_speed,   data = AircraftData)
+#summary(bcmodel)
+bptest(bcmodel)
+
+```
+
+The Box-Cox transformation (using λ = 0.8586) helped to adjust the
+dependent variable, but it did not completely solve the
+heteroscedasticity problem in the model.
+
+### 7.5. Outliers
+
+```{r Outliers}
+bestModel = lm(price ~ factor(engine_type) + engine_power + I(cruise_speed^2) +
+                        max_speed + cruise_speed + stall_speed + wing_span +
+                        factor(engine_type) * engine_power + factor(engine_type) * max_speed + 
+                        factor(engine_type) * cruise_speed + factor(engine_type) * wing_span +  
+                        engine_power * max_speed + engine_power * cruise_speed + engine_power * wing_span  + 
+                        max_speed * wing_span + cruise_speed * stall_speed,   data = AircraftData)
+
+
+plot(bestModel,which=5)
+AircraftData[cooks.distance(bestModel)>0.5,]
+#which =4 only prints the cook distance plot. 
+plot(bestModel,pch=18,col="lightblue",which=c(4)) 
+
+#cook distance
+AircraftData[cooks.distance(bestModel)>0.5,]
+
+#leverages points plots
+plot(bestModel,pch=18,col="lightblue",which=c(4)) #which =4 only prints the cook distance plot.
+```
+
+From here you can see that data point 47 is an influential case and we
+need to work for that point so find cook distance. Observation 47 (0.65)
+well above this threshold, indicating they are highly influential
+points.
+
+```{r}
+lev=hatvalues(bestModel)
+p = length(coef(bestModel))
+n = nrow(AircraftData)
+outlier2p = lev[lev>(2*p/n)]
+outlier3p = lev[lev>(3*p/n)]
+print("h_I>2p/n, outliers are")
+print(outlier2p)
+print(outlier3p)
+```
+
+Here 47 leverage point is 0.4346 and cook distance 0.65 so this is high
+influential points and remove and check the result.
+
+```{r Outliers removed}
+#ouliers removed
+AircraftData_NoOutliers = read.csv("C:/603/aircraft_price_no_outliers.csv")
+sum(is.na(AircraftData_NoOutliers))
+Aircraft_NoOutliers = na.omit(AircraftData_NoOutliers)
+
+bestModel_NoOutliers = lm(price ~ factor(engine_type) + engine_power + I(cruise_speed^2) +
+                        max_speed + cruise_speed + stall_speed + wing_span +
+                        factor(engine_type) * engine_power + factor(engine_type) * max_speed + 
+                        factor(engine_type) * cruise_speed + factor(engine_type) * wing_span +  
+                        engine_power * max_speed + engine_power * cruise_speed + engine_power * wing_span  + 
+                        max_speed * wing_span + cruise_speed * stall_speed,   data = Aircraft_NoOutliers)
+
+summary(bestModel_NoOutliers)$adj.r.square
+sigma(bestModel_NoOutliers)
+summary(bestModel)$adj.r.square
+sigma(bestModel)
+```
+
+## 8. Summary
+
+### 8.1. Key Findings
+
+Our best model predicts aircraft price based on engine type, performance
+metrics such as cruise speed, engine power, stall speed, max speed, and
+design factors like wing span. On analysis of the best model, we can see
+the below findings:
+
+1.  Engine Type:
+
+    Jet type is the reference category
+
+    Piston price is less than Jet by approximately 4.39 million USD
+
+    Propjet price is less than Jet by approximately 2.76 million USD
+
+2.  Cruise Speed impact:
+
+    Linear term: negative effect on price
+
+    Quadratic term: positive effect with exponential price increase at
+    higher speeds
+
+3.  Negative Effects: for stall speed and wing span
+
+4.  Interaction terms:
+
+    For Propjets, Higher max speed benefits, but higher cruise speed
+    reduces price.
+
+    Engine Power + Max Speed / Cruise Speed: Slight negative price
+    impact
+
+    Max Speed + Wing Span: Contributes positively to price
+
+**Jet Engines:** Predicted price is 5,823,241.56 USD when all other
+variables are zero. Jets do not experience price reductions like piston
+engines or propjets. Negative effects come from stall speed and wing
+span, with mixed interactions across other factors.
+
+**Piston Engines:** Predicted price is about 4.39 million USD lower than
+jets. Engine power decreases price by 981 units per unit increase, while
+max speed and cruise speed positively impact price. Greater wing span
+also increases price, but stall speed and wing span have overall
+negative effects.
+
+**PropJets Engines:** Predicted price is approximately 2.76 million USD
+lower than jets. Engine power reduces price by 2,284.54 units per unit
+increase, but max speed and wing span increase price. Higher cruise
+speed slightly decreases price, while stall speed and wing span have
+negative effects.
+
+### 8.2. Improvements
+
+#### 8.2.1 To address hetroscedasticity for Equal Variance 
+
+Since the best model has not meet with homoscedasticity or equal
+variance assumption. It could be resolved by doing some of the following
+methods
+
+1.  applying appropriate transformation of dependent variable (other
+    than log, sqrt. Since we tried it)
+2.  Use WLS instead of Ordinary Least Squares (OLS) to assign weights to
+    observations inversely proportional to their variance.
+3.  Check for omitted variables by introducing variables may help
+    capture the relationships causing heteroscedasticity
+4.  Identify and consider removing influential observations or outliers
+    that might cause variance issues.
+
+#### 8.2.2 Reduction of terms with VIF \> 5 
+
+Given that the predictors engine_power and cruise_speed are
+statistically and theoretically significant for our dataset, we chose to
+retain them despite their VIF being greater than 5. While these terms
+hold theoretical importance, removing them might yield alternative
+models capable of predicting prices effectively. Further analysis is
+necessary to evaluate their relevance, and we suggest examining whether
+the newly developed model could address the heteroscedasticity problem.
+
+
